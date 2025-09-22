@@ -237,6 +237,7 @@
 						<option value="3">3</option>
 						<option value="4">4</option>
 						<option value="5">5</option>
+						<option value="10">10</option>
 					</select>
 					<button class="icon-btn" id="settingsBtn">Settings</button>
 				</div>
@@ -504,9 +505,11 @@ audioEl.addEventListener('timeupdate', () => {
         repeatCounter++;
         const repeatsTarget = parseInt(repeatsSelect.value || '1', 10);
         if (isAutoLooping && repeatCounter < repeatsTarget){
-            // replay same segment
-            audioEl.currentTime = Math.max(0, segments[currentIndex].start + 0.001);
-            audioEl.play().catch(()=>{});
+            // wait 2s then replay same segment
+            setTimeout(() => {
+                audioEl.currentTime = Math.max(0, segments[currentIndex].start + 0.001);
+                audioEl.play().catch(()=>{});
+            }, 2000);
         } else {
             // stop at segment start awaiting user
             audioEl.currentTime = Math.max(0, segments[currentIndex].start + 0.001);
@@ -673,6 +676,16 @@ answer.addEventListener('input', () => {
 			e.preventDefault();
 			handleCheck();
 		}
+    // ALT key → trigger full replay sequence of this segment
+    if (e.key === 'Alt'){
+        e.preventDefault();
+        // restart from first repeat and play repeatsTarget times with 2s gaps
+        repeatCounter = 0;
+        isAutoLooping = true;
+        audioEl.pause();
+        audioEl.currentTime = Math.max(0, segments[currentIndex].start + 0.001);
+        audioEl.play().catch(()=>{});
+    }
 		if ((e.ctrlKey || e.metaKey) && e.key === 'Enter'){
 			e.preventDefault();
 			playCurrentSegment(true);
