@@ -193,6 +193,7 @@
 			<div class="progress-wrap" style="gap:14px;flex:1;">
 				<div class="progress"><div id="progressBar"></div></div>
 				<div id="progressText">0 / 0</div>
+				<div id="todayStats" class="segment-time" style="min-width:90px;text-align:right;">Today: 0m</div>
 			</div>
 		</div>
 
@@ -228,6 +229,14 @@
 						<option value="1.25">1.25x</option>
 						<option value="1.5">1.5x</option>
 						<option value="2">2x</option>
+					</select>
+					<label class="segment-time">Replays</label>
+					<select class="select" id="repeats">
+						<option value="1" selected>1</option>
+						<option value="2">2</option>
+						<option value="3">3</option>
+						<option value="4">4</option>
+						<option value="5">5</option>
 					</select>
 					<button class="icon-btn" id="settingsBtn">Settings</button>
 				</div>
@@ -269,6 +278,12 @@
 	let completed = 0;
 	let loaded = false;
 	let playingSegmentEnd = 0;
+	let repeatCounter = 0; // how many plays already for current segment
+	let isAutoLooping = false;
+
+	// Daily tracking (minutes of active playback)
+	let todayKey = new Date().toISOString().slice(0,10);
+	let playedSecondsToday = parseInt(localStorage.getItem('dd_played_'+todayKey) || '0', 10);
 
 	// Elements
 	const audioEl = document.getElementById('audio');
@@ -282,6 +297,8 @@
 	const segInfo = document.getElementById('segInfo');
 	const segmentClock = document.getElementById('segmentClock');
 	const speedSelect = document.getElementById('speed');
+	const repeatsSelect = document.getElementById('repeats');
+	const todayStats = document.getElementById('todayStats');
 
 	const replayBtn = document.getElementById('replayBtn');
 	const playPauseBtn = document.getElementById('playPauseBtn');
@@ -423,12 +440,21 @@
 		}[ch]));
 	}
 
+function isAnswerCorrect(correctStr, userStr){
+    const a = (correctStr||'').toLowerCase().replace(/[\u2018\u2019]/g,"'").match(/[a-z0-9']+/g) || [];
+    const b = (userStr||'').toLowerCase().replace(/[\u2018\u2019]/g,"'").match(/[a-z0-9']+/g) || [];
+    if (a.length !== b.length) return false;
+    for (let i=0;i<a.length;i++) if (a[i] !== b[i]) return false;
+    return true;
+}
+
 	// Playback only current segment
 	function playCurrentSegment(restart=true){
 		const seg = segments[currentIndex];
 		if (!seg) return;
 		if (restart) {
 			audioEl.currentTime = Math.max(0, seg.start + 0.001);
+			repeatCounter = 0;
 		} else {
 			// if we're outside the window, snap back
 			if (audioEl.currentTime < seg.start || audioEl.currentTime >= seg.end) {
@@ -439,6 +465,7 @@
 		audioEl.playbackRate = parseFloat(speedSelect.value || '1');
 		audioEl.play().catch(()=>{ /* autoplay might be blocked until user gesture */ });
 		playPauseBtn.textContent = '⏸ Pause';
+		isAutoLooping = true;
 	}
 
 	function pausePlayback(){
@@ -446,13 +473,48 @@
 		playPauseBtn.textContent = '▶ Play';
 	}
 
-	audioEl.addEventListener('timeupdate', () => {
-		if (playingSegmentEnd && audioEl.currentTime >= playingSegmentEnd - 0.02){
-			audioEl.pause();
-			audioEl.currentTime = Math.max(0, segments[currentIndex].start + 0.001);
-			playPauseBtn.textContent = '▶ Play';
-		}
-	});
+audioEl.addEventListener('timeupdate', () => {
+    // Daily time tracking: accumulate only when audio is playing
+    if (!audioEl.paused && !audioEl.seeking) {
+        // add ~0.25s per tick (timeupdate typically fires ~4/sec, but safer to compute delta)
+    }
+    // Compute delta precisely
+});
+
+// Track precise playback time and handle segment end / replays
+let lastTimeUpdate = null;
+audioEl.addEventListener('timeupdate', () => {
+    const now = performance.now();
+    if (lastTimeUpdate != null && !audioEl.paused && !audioEl.seeking) {
+        const deltaSec = Math.min(1, (now - lastTimeUpdate) / 1000);
+        playedSecondsToday += deltaSec;
+        if (todayStats) {
+            const mins = Math.floor(playedSecondsToday / 60);
+            todayStats.textContent = `Today: ${mins}m`;
+        }
+        // Persist every ~5 seconds
+        if (Math.floor(playedSecondsToday) % 5 === 0) {
+            localStorage.setItem('dd_played_'+todayKey, String(Math.floor(playedSecondsToday)));
+        }
+    }
+    lastTimeUpdate = now;
+
+    if (playingSegmentEnd && audioEl.currentTime >= playingSegmentEnd - 0.02){
+        audioEl.pause();
+        repeatCounter++;
+        const repeatsTarget = parseInt(repeatsSelect.value || '1', 10);
+        if (isAutoLooping && repeatCounter < repeatsTarget){
+            // replay same segment
+            audioEl.currentTime = Math.max(0, segments[currentIndex].start + 0.001);
+            audioEl.play().catch(()=>{});
+        } else {
+            // stop at segment start awaiting user
+            audioEl.currentTime = Math.max(0, segments[currentIndex].start + 0.001);
+            playPauseBtn.textContent = '▶ Play';
+            isAutoLooping = false;
+        }
+    }
+});
 
 	// Transcript listing
 	function renderTranscript(){
@@ -507,15 +569,26 @@
 	}
 
 	function handleCheck(){
-		const seg = segments[currentIndex];
-		const userText = answer.value.trim();
-		const diffHtml = renderDiff(seg.text, userText);
-		showResult(diffHtml);
-		if (!resultArea.dataset.checked){
-			resultArea.dataset.checked = '1';
-			completed = Math.min(segments.length, completed + 1);
-			updateProgressUI();
-		}
+    const seg = segments[currentIndex];
+    const userText = answer.value.trim();
+    if (isAnswerCorrect(seg.text, userText)){
+        // correct → auto next
+        if (!resultArea.dataset.checked){
+            resultArea.dataset.checked = '1';
+            completed = Math.min(segments.length, completed + 1);
+            updateProgressUI();
+        }
+        clearResult();
+        nextSegment();
+        return;
+    }
+    const diffHtml = renderDiff(seg.text, userText);
+    showResult(diffHtml);
+    if (!resultArea.dataset.checked){
+        resultArea.dataset.checked = '1';
+        completed = Math.min(segments.length, completed + 1);
+        updateProgressUI();
+    }
 	}
 
 	function handleSkip(){
@@ -577,11 +650,25 @@
 	checkBtn.addEventListener('click', handleCheck);
 	skipBtn.addEventListener('click', handleSkip);
 
+// Live validation: turn Check -> Next when answer is correct
+answer.addEventListener('input', () => {
+    const seg = segments[currentIndex];
+    const ok = isAnswerCorrect(seg?.text || '', answer.value || '');
+    checkBtn.textContent = ok ? 'Next' : 'Check';
+});
+
 	// Tabs
 	tabs.forEach(t => t.addEventListener('click', () => setTabs(t.dataset.tab)));
 
 	// Keyboard shortcuts
 	answer.addEventListener('keydown', (e) => {
+    // hide result when focusing/typing again
+    if (!e.shiftKey && !e.metaKey && !e.ctrlKey && e.key.length === 1) {
+        clearResult();
+        resultArea.dataset.checked = '';
+        // Also revert button text if it was set to Next
+        checkBtn.textContent = 'Check';
+    }
 		if (e.key === 'Enter' && !e.shiftKey){
 			e.preventDefault();
 			handleCheck();
@@ -591,6 +678,12 @@
 			playCurrentSegment(true);
 		}
 	});
+
+// Hide diff when textarea gains focus
+answer.addEventListener('focus', () => {
+    clearResult();
+    resultArea.dataset.checked = '';
+});
 
 	// Initialize UI
 	updateProgressUI();
