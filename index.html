@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Daily Dictation — Local</title>
+<style>
+	:root{
+		--bg:#0f141a;
+		--panel:#151b23;
+		--muted:#8a939f;
+		--text:#e6edf3;
+		--accent:#69a7ff;
+		--accent-2:#2b87ff;
+		--good:#23d18b;
+		--bad:#ff6b6b;
+		--missing:#7d8590;
+		--border:#26303a;
+		--btn:#1f2630;
+		--btn-hover:#283141;
+		--shadow:0 10px 30px rgba(0,0,0,.35);
+	}
+
+	* { box-sizing: border-box; }
+	html, body { height: 100%; }
+	body{
+		margin:0;
+		font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+		background: var(--bg);
+		color: var(--text);
+	}
+
+	.app{
+		max-width: 1100px;
+		margin: 0 auto;
+		padding: 18px 16px 40px;
+	}
+
+	/* Top bar */
+	.topbar{
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		position: sticky;
+		top: 0;
+		padding: 10px 12px;
+		margin: -10px -12px 16px;
+		background: rgba(15,20,26,.8);
+		backdrop-filter: blur(8px);
+		border-bottom: 1px solid var(--border);
+		z-index: 2;
+	}
+	.brand{
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		font-weight: 700;
+		letter-spacing:.2px;
+	}
+	.brand .dot{
+		width: 22px;height: 22px;border-radius: 6px;background: linear-gradient(135deg, var(--accent), var(--accent-2));
+		box-shadow: 0 0 0 2px rgba(105,167,255,.1);
+	}
+	.progress-wrap{
+		display:flex;align-items:center;gap:10px;min-width:180px;justify-content:flex-end;
+	}
+	#progressText{ font-weight:600; color: #d0daea; }
+	.progress{
+		flex:1;
+		height:8px;border-radius:999px;background:#202a36;overflow:hidden;min-width:160px;box-shadow: inset 0 0 0 1px #1d2631;
+	}
+	.progress > div{
+		height:100%;width:0%;background: linear-gradient(90deg, var(--accent), var(--accent-2));
+		transition: width .25s ease;
+	}
+
+	/* Loader / inputs panel */
+	.loader{
+		background: var(--panel);
+		border:1px solid var(--border);
+		border-radius: 12px;
+		box-shadow: var(--shadow);
+		padding: 16px;
+		margin-bottom: 16px;
+		display: grid;
+		gap: 12px;
+		grid-template-columns: 1fr 1fr auto;
+		align-items: end;
+	}
+	.loader label{ display:block;font-size:13px;color:var(--muted);margin-bottom:6px; }
+	.input{
+		background:#0d1218;border:1px dashed #2a3746;border-radius:10px;padding:12px;
+		color:#bcd0ea;
+	}
+	.input input{ width:100%; background:transparent; border:none; color:inherit; }
+	.button{
+		padding: 10px 16px;
+		border-radius: 10px;
+		border: 1px solid #2a3746;
+		background: var(--btn);
+		color: #d8e3f3;
+		cursor: pointer;
+		font-weight: 600;
+		transition: background .15s ease, transform .02s ease;
+	}
+	.button:hover{ background: var(--btn-hover); }
+	.button:active{ transform: translateY(1px); }
+	.button.primary{
+		background: linear-gradient(180deg, #2a66ff, #1f56dc);
+		border-color: #1f56dc;
+		color: white;
+	}
+	.button.ghost{ background: transparent; }
+
+	/* Core panel */
+	.panel{
+		background: var(--panel);
+		border:1px solid var(--border);
+		border-radius: 12px;
+		box-shadow: var(--shadow);
+		overflow: hidden;
+	}
+
+	.tabs{
+		display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--border);padding:8px;background:#0f151e;
+	}
+	.tab{
+		padding:8px 12px;border-radius:8px;color:#c6d1df;cursor:pointer;font-weight:600;
+	}
+	.tab.active{ background:#1a2431;color:#fff; }
+	.right-actions{ margin-left:auto; display:flex; align-items:center; gap:10px; }
+	.select, .speed{
+		background:#0d1218;border:1px solid #2a3746;border-radius:9px;color:#cde0ff;padding:6px 8px;
+	}
+
+	/* Dictation area */
+	.content{ padding: 16px; }
+	.d-controls{
+		display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;
+	}
+	.player{
+		display:flex;align-items:center;gap:10px;background:#0d1218;border:1px solid #2a3746;border-radius:10px;padding:8px 10px;
+	}
+	.icon-btn{
+		background:#1a2330;border:1px solid #2a3746;color:#cfe0ff;border-radius:8px;padding:8px 10px;cursor:pointer;font-weight:700;
+	}
+	.icon-btn:hover{ background:#223045; }
+	.segment-time{ color:#8ea0b5;font-size:12px;padding:0 6px; }
+	.textbox{
+		width:100%;
+		background:#0d1218;border:1px solid #2a3746;border-radius:10px;color:#e9f1ff;
+		padding:12px 12px;font-size:16px;line-height:1.5; resize: vertical; min-height:80px;
+	}
+	.actions{ display:flex;align-items:center;gap:10px;margin-top:10px; }
+	.check{ min-width:110px; }
+	.result{
+		margin-top:14px;padding:12px;border-radius:10px;background:#0d1218;border:1px solid #243145;color:#d7e4fb;
+		font-size:16px;line-height:1.6;word-wrap:break-word;
+	}
+	.token{ padding:2px 3px;border-radius:6px;margin:0 1px 3px 0;display:inline-block; }
+	.good{ background: rgba(35,209,139,.15); color:#b8f7dd; border:1px solid rgba(35,209,139,.35); }
+	.bad{ background: rgba(255,107,107,.15); color:#ffd2d2; border:1px solid rgba(255,107,107,.35); }
+	.missing{ background: rgba(125,133,144,.18); color:#d0d3d8; border:1px dashed rgba(125,133,144,.5); }
+
+	.helper{ color:var(--muted); font-size:13px; margin-top:8px; }
+
+	/* Transcript */
+	.transcript{
+		padding: 8px 8px 2px 8px;
+	}
+	.line{
+		padding:8px 10px;border-radius:8px;border:1px solid transparent;cursor:default;color:#cdd7e5;
+	}
+	.line.current{ background:#142031;border-color:#253244; }
+	.line small{ color:#8593a6; }
+
+	.hidden{ display:none !important; }
+
+	@media (max-width: 760px){
+		.loader{ grid-template-columns: 1fr; }
+		.progress-wrap{ min-width: 120px; }
+	}
+</style>
+</head>
+<body>
+	<div class="app">
+		<div class="topbar">
+			<div class="brand">
+				<div class="dot"></div>
+				<div>Daily Dictation — Local</div>
+			</div>
+			<div class="progress-wrap" style="gap:14px;flex:1;">
+				<div class="progress"><div id="progressBar"></div></div>
+				<div id="progressText">0 / 0</div>
+			</div>
+		</div>
+
+		<!-- Loader: pick audio + srt -->
+		<div class="loader" id="loader">
+			<div>
+				<label>Audio file (MP3/WAV)</label>
+				<div class="input"><input type="file" id="audioFile" accept="audio/*" /></div>
+			</div>
+			<div>
+				<label>Subtitle file (.srt)</label>
+				<div class="input"><input type="file" id="srtFile" accept=".srt,text/plain" /></div>
+			</div>
+			<div>
+				<button class="button primary" id="loadBtn">Load</button>
+				<div class="helper">Pick both files, then click Load. Everything runs locally.</div>
+			</div>
+		</div>
+
+		<!-- Main panel -->
+		<div class="panel hidden" id="mainPanel">
+			<div class="tabs">
+				<div class="tab active" data-tab="dictation">Dictation</div>
+				<div class="tab" data-tab="transcript">Full transcript</div>
+
+				<div class="right-actions">
+					<div class="segment-time" id="segmentClock">--:-- — --:--</div>
+					<label class="segment-time">Speed</label>
+					<select class="select speed" id="speed">
+						<option value="0.5">0.5x</option>
+						<option value="0.75">0.75x</option>
+						<option selected value="1">1x</option>
+						<option value="1.25">1.25x</option>
+						<option value="1.5">1.5x</option>
+						<option value="2">2x</option>
+					</select>
+					<button class="icon-btn" id="settingsBtn">Settings</button>
+				</div>
+			</div>
+
+			<div class="content" id="tab-dictation">
+				<div class="d-controls">
+					<div class="player">
+						<button class="icon-btn" id="replayBtn">⟲ Replay</button>
+						<button class="icon-btn" id="playPauseBtn">▶ Play</button>
+						<div class="segment-time" id="segInfo">Segment 0 / 0</div>
+					</div>
+				</div>
+
+				<textarea id="answer" class="textbox" placeholder="Type what you hear..."></textarea>
+				<div class="actions">
+					<button class="button primary check" id="checkBtn">Check</button>
+					<button class="button ghost" id="skipBtn">Skip</button>
+				</div>
+
+				<div class="result hidden" id="resultArea"></div>
+				<div class="helper">Enter → Check • Ctrl/Cmd+Enter → Replay segment</div>
+			</div>
+
+			<div class="content hidden" id="tab-transcript">
+				<div class="transcript" id="transcript"></div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Hidden audio element -->
+	<audio id="audio" preload="metadata"></audio>
+
+<script>
+(() => {
+	// State
+	let segments = [];         // [{index,start,end,text}]
+	let currentIndex = 0;      // 0-based
+	let completed = 0;
+	let loaded = false;
+	let playingSegmentEnd = 0;
+
+	// Elements
+	const audioEl = document.getElementById('audio');
+	const loadBtn = document.getElementById('loadBtn');
+	const audioFileInput = document.getElementById('audioFile');
+	const srtFileInput = document.getElementById('srtFile');
+	const loader = document.getElementById('loader');
+	const mainPanel = document.getElementById('mainPanel');
+	const progressText = document.getElementById('progressText');
+	const progressBar = document.getElementById('progressBar');
+	const segInfo = document.getElementById('segInfo');
+	const segmentClock = document.getElementById('segmentClock');
+	const speedSelect = document.getElementById('speed');
+
+	const replayBtn = document.getElementById('replayBtn');
+	const playPauseBtn = document.getElementById('playPauseBtn');
+	const checkBtn = document.getElementById('checkBtn');
+	const skipBtn = document.getElementById('skipBtn');
+	const answer = document.getElementById('answer');
+	const resultArea = document.getElementById('resultArea');
+
+	const tabs = document.querySelectorAll('.tab');
+	const tabDictation = document.getElementById('tab-dictation');
+	const tabTranscript = document.getElementById('tab-transcript');
+	const transcriptEl = document.getElementById('transcript');
+
+	// Utilities
+	const toTime = (t) => {
+		const s = Math.max(0, Math.floor(t));
+		const m = Math.floor(s / 60);
+		const sec = s % 60;
+		return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+	};
+
+	function updateProgressUI() {
+		const total = segments.length || 0;
+		const displayIdx = Math.min(currentIndex + 1, Math.max(total, 1));
+		progressText.textContent = `${displayIdx} / ${total}`;
+		segInfo.textContent = `Segment ${displayIdx} / ${total}`;
+		const width = total ? (completed / total) * 100 : 0;
+		progressBar.style.width = `${width}%`;
+
+		if (segments[ currentIndex ]) {
+			const s = segments[currentIndex];
+			segmentClock.textContent = `${toTime(s.start)} — ${toTime(s.end)}`;
+		} else {
+			segmentClock.textContent = `--:-- — --:--`;
+		}
+	}
+
+	function setTabs(active) {
+		tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === active));
+		tabDictation.classList.toggle('hidden', active !== 'dictation');
+		tabTranscript.classList.toggle('hidden', active !== 'transcript');
+	}
+
+	function clearResult() {
+		resultArea.classList.add('hidden');
+		resultArea.innerHTML = '';
+	}
+
+	function showResult(html) {
+		resultArea.innerHTML = html;
+		resultArea.classList.remove('hidden');
+	}
+
+	// SRT parsing
+	function parseSRT(text) {
+		// Normalize line endings
+		const src = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+		const blocks = src.split(/\n{2,}/);
+		const out = [];
+
+		for (const block of blocks) {
+			const lines = block.trim().split('\n');
+			if (lines.length >= 2) {
+				// If first line is an index, drop it
+				let i = 0;
+				if (/^\d+$/.test(lines[0].trim())) i = 1;
+
+				const timeLine = lines[i] || '';
+				const m = timeLine.match(/(\d{2}):(\d{2}):(\d{2}),(\d{3})\s+-->\s+(\d{2}):(\d{2}):(\d{2}),(\d{3})/);
+				if (!m) continue;
+
+				const start = (+m[1])*3600 + (+m[2])*60 + (+m[3]) + (+m[4])/1000;
+				const end   = (+m[5])*3600 + (+m[6])*60 + (+m[7]) + (+m[8])/1000;
+				const textLines = lines.slice(i+1).join(' ').replace(/<[^>]+>/g,'').trim();
+				if (textLines) {
+					out.push({ index: out.length, start, end, text: textLines });
+				}
+			}
+		}
+		return out;
+	}
+
+	// Tokenization for diff
+	function words(str){
+		// Keep letters, numbers, and apostrophes as part of words
+		// Lowercased for case-insensitive compare
+		return (str
+			.toLowerCase()
+			.replace(/[\u2018\u2019]/g,"'") // curly apostrophes
+			.match(/[a-z0-9']+/g) || []);
+	}
+
+	// LCS-based alignment to interleave match/ins/del actions
+	function alignDiff(correctStr, userStr) {
+		const a = words(correctStr);
+		const b = words(userStr);
+
+		const n = a.length, m = b.length;
+		const dp = Array.from({length: n+1}, () => new Array(m+1).fill(0));
+
+		for (let i=1;i<=n;i++){
+			for (let j=1;j<=m;j++){
+				if (a[i-1] === b[j-1]) dp[i][j] = dp[i-1][j-1] + 1;
+				else dp[i][j] = Math.max(dp[i-1][j], dp[i][j-1]);
+			}
+		}
+		// Backtrack to sequence of actions
+		const actions = [];
+		let i = n, j = m;
+		while (i>0 || j>0){
+			if (i>0 && j>0 && a[i-1] === b[j-1]) {
+				actions.push({type:'match', word:a[i-1]});
+				i--; j--;
+			} else if (j>0 && (i===0 || dp[i][j-1] >= dp[i-1][j])) {
+				actions.push({type:'ins', word:b[j-1]}); // user extra/wrong
+				j--;
+			} else if (i>0 && (j===0 || dp[i][j-1] < dp[i-1][j])) {
+				actions.push({type:'del', word:a[i-1]}); // missing from user
+				i--;
+			}
+		}
+		actions.reverse();
+		return actions;
+	}
+
+	function renderDiff(correctStr, userStr) {
+		const actions = alignDiff(correctStr, userStr);
+		const parts = actions.map(a => {
+			if (a.type === 'match') return `<span class="token good">${escapeHtml(a.word)}</span>`;
+			if (a.type === 'ins')   return `<span class="token bad">${escapeHtml(a.word)}</span>`;
+			return `<span class="token missing">${escapeHtml(a.word)}</span>`;
+		});
+		return parts.join(' ');
+	}
+
+	function escapeHtml(s){
+		return s.replace(/[&<>"']/g, ch => ({
+			'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+		}[ch]));
+	}
+
+	// Playback only current segment
+	function playCurrentSegment(restart=true){
+		const seg = segments[currentIndex];
+		if (!seg) return;
+		if (restart) {
+			audioEl.currentTime = Math.max(0, seg.start + 0.001);
+		} else {
+			// if we're outside the window, snap back
+			if (audioEl.currentTime < seg.start || audioEl.currentTime >= seg.end) {
+				audioEl.currentTime = Math.max(0, seg.start + 0.001);
+			}
+		}
+		playingSegmentEnd = seg.end;
+		audioEl.playbackRate = parseFloat(speedSelect.value || '1');
+		audioEl.play().catch(()=>{ /* autoplay might be blocked until user gesture */ });
+		playPauseBtn.textContent = '⏸ Pause';
+	}
+
+	function pausePlayback(){
+		audioEl.pause();
+		playPauseBtn.textContent = '▶ Play';
+	}
+
+	audioEl.addEventListener('timeupdate', () => {
+		if (playingSegmentEnd && audioEl.currentTime >= playingSegmentEnd - 0.02){
+			audioEl.pause();
+			audioEl.currentTime = Math.max(0, segments[currentIndex].start + 0.001);
+			playPauseBtn.textContent = '▶ Play';
+		}
+	});
+
+	// Transcript listing
+	function renderTranscript(){
+		const frag = document.createDocumentFragment();
+		segments.forEach((s, idx) => {
+			const div = document.createElement('div');
+			div.className = 'line';
+			div.dataset.idx = String(idx);
+			div.innerHTML = `<small>${toTime(s.start)} → ${toTime(s.end)}</small><br>${escapeHtml(s.text)}`;
+			frag.appendChild(div);
+		});
+		transcriptEl.innerHTML = '';
+		transcriptEl.appendChild(frag);
+		highlightCurrentInTranscript();
+	}
+
+	function highlightCurrentInTranscript(){
+		const children = transcriptEl.querySelectorAll('.line');
+		children.forEach(el => el.classList.toggle('current', Number(el.dataset.idx) === currentIndex));
+	}
+
+	transcriptEl.addEventListener('click', (e) => {
+		const line = e.target.closest('.line');
+		if (!line) return;
+		currentIndex = Number(line.dataset.idx) || 0;
+		clearResult();
+		answer.value = '';
+		playCurrentSegment(true);
+		updateProgressUI();
+		highlightCurrentInTranscript();
+		setTabs('dictation');
+	});
+
+	// Flow control
+	function nextSegment(){
+		if (currentIndex < segments.length - 1){
+			currentIndex++;
+			updateProgressUI();
+			highlightCurrentInTranscript();
+			clearResult();
+			answer.value = '';
+			playCurrentSegment(true);
+			answer.focus();
+		} else {
+			// Done
+			pausePlayback();
+			answer.disabled = true;
+			checkBtn.disabled = true;
+			skipBtn.disabled = true;
+			showResult(`<strong>Finished! 🎉</strong> Open the Full transcript tab to review all lines.`);
+		}
+	}
+
+	function handleCheck(){
+		const seg = segments[currentIndex];
+		const userText = answer.value.trim();
+		const diffHtml = renderDiff(seg.text, userText);
+		showResult(diffHtml);
+		if (!resultArea.dataset.checked){
+			resultArea.dataset.checked = '1';
+			completed = Math.min(segments.length, completed + 1);
+			updateProgressUI();
+		}
+	}
+
+	function handleSkip(){
+		if (!resultArea.dataset.checked){
+			completed = Math.min(segments.length, completed + 1);
+		}
+		resultArea.dataset.checked = '';
+		nextSegment();
+	}
+
+	// Events
+	loadBtn.addEventListener('click', async () => {
+		const audioFile = audioFileInput.files && audioFileInput.files[0];
+		const srtFile = srtFileInput.files && srtFileInput.files[0];
+
+		if (!audioFile || !srtFile) {
+			alert('Please select both an audio file and a .srt subtitle file.');
+			return;
+		}
+		try{
+			const audioURL = URL.createObjectURL(audioFile);
+			audioEl.src = audioURL;
+
+			const srtText = await srtFile.text();
+			segments = parseSRT(srtText);
+			if (!segments.length) throw new Error('No segments parsed from SRT.');
+
+			currentIndex = 0;
+			completed = 0;
+			loaded = true;
+
+			renderTranscript();
+			updateProgressUI();
+			loader.classList.add('hidden');
+			mainPanel.classList.remove('hidden');
+
+			// Seek once metadata is ready then play first segment
+			audioEl.onloadedmetadata = () => {
+				playCurrentSegment(true);
+				answer.focus();
+			};
+		}catch(err){
+			console.error(err);
+			alert('Failed to load files. Please ensure the SRT is valid.');
+		}
+	});
+
+	replayBtn.addEventListener('click', () => {
+		playCurrentSegment(true);
+	});
+	playPauseBtn.addEventListener('click', () => {
+		if (audioEl.paused) playCurrentSegment(false);
+		else pausePlayback();
+	});
+	speedSelect.addEventListener('change', () => {
+		audioEl.playbackRate = parseFloat(speedSelect.value || '1');
+	});
+
+	checkBtn.addEventListener('click', handleCheck);
+	skipBtn.addEventListener('click', handleSkip);
+
+	// Tabs
+	tabs.forEach(t => t.addEventListener('click', () => setTabs(t.dataset.tab)));
+
+	// Keyboard shortcuts
+	answer.addEventListener('keydown', (e) => {
+		if (e.key === 'Enter' && !e.shiftKey){
+			e.preventDefault();
+			handleCheck();
+		}
+		if ((e.ctrlKey || e.metaKey) && e.key === 'Enter'){
+			e.preventDefault();
+			playCurrentSegment(true);
+		}
+	});
+
+	// Initialize UI
+	updateProgressUI();
+	setTabs('dictation');
+})();
+</script>
+</body>
+</html>
+
+
